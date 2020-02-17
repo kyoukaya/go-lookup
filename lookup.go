@@ -91,7 +91,7 @@ func getValueByName(v reflect.Value, key string) (reflect.Value, error) {
 		value = value.Index(index)
 	}
 
-	if value.Kind() == reflect.Ptr || value.Kind() == reflect.Interface {
+	if value.Kind() == reflect.Interface {
 		value = value.Elem()
 	}
 
