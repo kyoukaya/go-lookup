@@ -25,8 +25,8 @@ var (
 
 // LookupString performs a lookup into a value, using a string. Same as `Loookup`
 // but using a string with the keys separated by `.`
-func LookupString(i interface{}, path string) (reflect.Value, error) {
-	return Lookup(i, strings.Split(path, SplitToken)...)
+func LookupString(i interface{}, path string, byJSON bool) (reflect.Value, error) {
+	return Lookup(i, byJSON, strings.Split(path, SplitToken)...)
 }
 
 // Lookup performs a lookup into a value, using a path of keys. The key should
@@ -34,7 +34,7 @@ func LookupString(i interface{}, path string) (reflect.Value, error) {
 // to access a specific index. If one key owns to a slice and an index is not
 // specificied the rest of the path will be apllied to evaley value of the
 // slice, and the value will be merged into a slice.
-func Lookup(i interface{}, path ...string) (reflect.Value, error) {
+func Lookup(i interface{}, byJSON bool, path ...string) (reflect.Value, error) {
 	value := reflect.ValueOf(i)
 	var parent reflect.Value
 	var err error
@@ -42,7 +42,7 @@ func Lookup(i interface{}, path ...string) (reflect.Value, error) {
 	for i, part := range path {
 		parent = value
 
-		value, err = getValueByName(value, part)
+		value, err = getValueByName(value, part, byJSON)
 		if err == nil {
 			continue
 		}
@@ -51,7 +51,7 @@ func Lookup(i interface{}, path ...string) (reflect.Value, error) {
 			break
 		}
 
-		value, err = aggreateAggregableValue(parent, path[i:])
+		value, err = aggreateAggregableValue(parent, path[i:], byJSON)
 
 		break
 	}
@@ -59,7 +59,20 @@ func Lookup(i interface{}, path ...string) (reflect.Value, error) {
 	return value, err
 }
 
-func getValueByName(v reflect.Value, key string) (reflect.Value, error) {
+func getFieldByJSONTag(v reflect.Value, tag string) reflect.Value {
+	t := v.Type()
+	nFields := t.NumField()
+	var i int
+	for i = 0; i < nFields; i++ {
+		tagStr := t.Field(i).Tag.Get("json")
+		if tagStr == tag {
+			break
+		}
+	}
+	return v.Field(i)
+}
+
+func getValueByName(v reflect.Value, key string, byJSON bool) (reflect.Value, error) {
 	var value reflect.Value
 	var index int
 	var err error
@@ -70,9 +83,13 @@ func getValueByName(v reflect.Value, key string) (reflect.Value, error) {
 	}
 	switch v.Kind() {
 	case reflect.Ptr, reflect.Interface:
-		return getValueByName(v.Elem(), key)
+		return getValueByName(v.Elem(), key, byJSON)
 	case reflect.Struct:
-		value = v.FieldByName(key)
+		if byJSON {
+			value = getFieldByJSONTag(v, key)
+		} else {
+			value = v.FieldByName(key)
+		}
 	case reflect.Map:
 		kValue := reflect.Indirect(reflect.New(v.Type().Key()))
 		kValue.SetString(key)
@@ -98,7 +115,7 @@ func getValueByName(v reflect.Value, key string) (reflect.Value, error) {
 	return value, nil
 }
 
-func aggreateAggregableValue(v reflect.Value, path []string) (reflect.Value, error) {
+func aggreateAggregableValue(v reflect.Value, path []string, byJSON bool) (reflect.Value, error) {
 	values := make([]reflect.Value, 0)
 
 	l := v.Len()
@@ -112,7 +129,7 @@ func aggreateAggregableValue(v reflect.Value, path []string) (reflect.Value, err
 
 	index := indexFunction(v)
 	for i := 0; i < l; i++ {
-		value, err := Lookup(index(i).Interface(), path...)
+		value, err := Lookup(index(i).Interface(), byJSON, path...)
 		if err != nil {
 			return reflect.Value{}, err
 		}
