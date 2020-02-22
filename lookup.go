@@ -69,6 +69,9 @@ func getFieldByJSONTag(v reflect.Value, tag string) reflect.Value {
 			break
 		}
 	}
+	if i == nFields {
+		return reflect.Value{}
+	}
 	return v.Field(i)
 }
 
